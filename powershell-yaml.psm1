@@ -53,7 +53,6 @@ function Convert-ValueToProperType {
         if (!($Node.Value -is [string])) {
             return $Node
         }
-        
         if ($Node.Style -eq 'Plain')
         {
             $types = @([int], [long], [double], [boolean], [decimal])
@@ -87,7 +86,7 @@ function Convert-ValueToProperType {
                 return $datetime
             }
         }
-            
+
         return $Node.Value
     }
 }
@@ -150,10 +149,11 @@ function Convert-HashtableToDictionary {
         [Parameter(Mandatory=$true,ValueFromPipeline=$true)]
         [hashtable]$Data
     )
+    $ret = [System.Collections.Generic.Dictionary[string,object]](New-Object 'System.Collections.Generic.Dictionary[string,object]')
     foreach($i in $($data.Keys)) {
-        $Data[$i] = Convert-PSObjectToGenericObject $Data[$i]
+        $ret[$i] = Convert-PSObjectToGenericObject $Data[$i]
     }
-    return $Data
+    return $ret
 }
 
 function Convert-OrderedHashtableToDictionary {
@@ -245,6 +245,32 @@ function ConvertFrom-Yaml {
 }
 
 
+function Get-Serializer {
+    Param(
+        [Parameter(Mandatory=$true)]
+        [YamlDotNet.Serialization.SerializationOptions]$Options
+    )
+    $builder = [YamlDotNet.Serialization.SerializerBuilder]::new()
+    switch ( $Options ) {
+        EmitDefaults {
+            return $builder.EmitDefaults().Build()
+        }
+        DisableAliases {
+            return $builder.DisableAliases().Build()
+        }
+        JsonCompatible {
+            return $builder.JsonCompatible().Build()
+        }
+        Roundtrip {
+            return $builder.EnsureRoundtrip().Build()
+        }
+        default {
+            return $builder.Build()
+        }
+    }
+}
+
+
 function ConvertTo-Yaml {
     [CmdletBinding(DefaultParameterSetName = 'NoOptions')]
     Param(
@@ -300,7 +326,7 @@ function ConvertTo-Yaml {
         }
 
         try {
-            $serializer = New-Object "YamlDotNet.Serialization.Serializer" $Options
+            $serializer = Get-Serializer $options
             $serializer.Serialize($wrt, $norm)
         }
         catch{
