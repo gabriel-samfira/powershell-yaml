@@ -20,25 +20,58 @@ if (Test-Path $assemblies) {
     . $here\Load-Assemblies.ps1
 }
 
-function Get-YamlDocuments {
+function Get-Parser {
     [CmdletBinding()]
     Param(
-        [Parameter(Mandatory=$true, ValueFromPipeline=$true)]
-        [string]$Yaml,
+        [Parameter(Mandatory=$true)]
+        [System.IO.StringReader]$stringReader,
         [switch]$UseMergingParser=$false
     )
     PROCESS {
-        $stringReader = new-object System.IO.StringReader($Yaml)
         $parser = New-Object "YamlDotNet.Core.Parser" $stringReader
         if($UseMergingParser) {
             $parser = New-Object "YamlDotNet.Core.MergingParser" $parser
         }
+        return $parser
+    }
+}
 
+function Get-YamlDocumentsUsingDeserializer {
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$true)]
+        [YamlDotNet.Core.IParser]$Parser
+    )
+    PROCESS {
+        $docStart = [YamlDotNet.Core.Events.DocumentStart](New-Object "YamlDotNet.Core.Events.DocumentStart")
+        # Consume StartStream
+        $parser.MoveNext() | Out-Null
+        $parser.MoveNext() | Out-Null
+
+        $deserializer = ([YamlDotNet.Serialization.DeserializerBuilder](New-Object "YamlDotNet.Serialization.DeserializerBuilder")).build()
+
+        $accept = [YamlDotNet.Core.ParserExtensions].GetMethod("Accept")
+        $acceptGeneric = $accept.MakeGenericMethod($docStart.GetType())
+
+        $documents = @()
+
+        while($acceptGeneric.Invoke($null, $parser)){
+            $doc = $deserializer.Deserialize($parser)
+            $documents += $doc
+        }
+        return ,$documents
+    }
+}
+
+function Get-YamlDocuments {
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$true)]
+        [YamlDotNet.Core.IParser]$Parser
+    )
+    PROCESS {
         $yamlStream = New-Object "YamlDotNet.RepresentationModel.YamlStream"
         $yamlStream.Load([YamlDotNet.Core.IParser] $parser)
-
-        $stringReader.Close()
-
         return $yamlStream
     }
 }
@@ -132,7 +165,7 @@ function Convert-YamlDocumentToPSObject {
     [CmdletBinding()]
     Param(
         [Parameter(Mandatory=$true, ValueFromPipeline=$true)]
-        [System.Object]$Node, 
+        [System.Object]$Node,
         [switch]$Ordered
     )
     PROCESS {
@@ -224,14 +257,25 @@ function ConvertFrom-Yaml {
         [string]$Yaml,
         [switch]$AllDocuments=$false,
         [switch]$Ordered,
-        [switch]$UseMergingParser=$false
+        [switch]$UseMergingParser=$false,
+        [switch]$Raw=$false
     )
-    
+
     PROCESS {
         if(!$Yaml){
             return
         }
-        $documents = Get-YamlDocuments -Yaml $Yaml -UseMergingParser:$UseMergingParser
+        $stringReader = new-object System.IO.StringReader($Yaml)
+        $parser = Get-Parser -stringReader $stringReader -UseMergingParser:$UseMergingParser
+
+        if ($raw) {
+            $docs = Get-YamlDocumentsUsingDeserializer $parser
+            if($AllDocuments) {
+                return ,$docs
+            }
+            return $docs[0]
+        }
+        $documents = Get-YamlDocuments $parser
         if (!$documents.Count) {
             return
         }

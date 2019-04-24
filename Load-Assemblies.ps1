@@ -15,7 +15,7 @@
 
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 
-function Load-Assembly {
+function Invoke-LoadAssembly {
     $libDir = Join-Path $here "lib"
     $assemblies = @{
         "core" = Join-Path $libDir "netstandard1.3\YamlDotNet.dll";
@@ -44,7 +44,7 @@ function Initialize-Assemblies {
 
     $yaml = [System.AppDomain]::CurrentDomain.GetAssemblies() | ? Location -Match "YamlDotNet.dll"
     if (!$yaml) {
-        return Load-Assembly
+        return Invoke-LoadAssembly
     }
 
     foreach ($i in $requiredTypes){
